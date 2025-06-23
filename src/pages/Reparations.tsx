@@ -23,73 +23,81 @@ import {
 const Reparations = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [reparations, setReparations] = useState([]);
+  const [interventions, setInterventions] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchReparations = async () => {
+    const fetchInterventions = async () => {
       try {
-        const response = await fetch('/api/repairs');
-        if (!response.ok) {
-          throw new Error('Failed to fetch repairs');
+        const response = await fetch('http://localhost:5000/api/interventions');
+        if (response.ok) {
+          const data = await response.json();
+          setInterventions(data);
         }
-        const data = await response.json();
-        // Map backend data to frontend structure
-        const mappedData = data.map(item => ({
-          id: item.repair_number,
-          checklistId: item.checklist_id,
-          modele: '', // Could fetch moto model separately if needed
-          immatriculation: '',
-          client: '',
-          mecanicien: '', // Could fetch user name separately if needed
-          dateDebut: item.date || '',
-          dateFin: null,
-          statut: 'en_cours', // Status not in backend, defaulting
-          services: [],
-          pieces: [],
-          cout: 0,
-          kilometrage: item.mileage || 0
-        }));
-        setReparations(mappedData);
       } catch (error) {
-        console.error('Error fetching repairs:', error);
+        console.error('Error fetching interventions:', error);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchReparations();
+
+    fetchInterventions();
   }, []);
 
-  const getStatusBadge = (statut: string) => {
-    switch (statut) {
-      case 'terminee':
-        return <Badge className="bg-green-50 text-green-700 border-green-200">Terminée</Badge>;
-      case 'en_cours':
-        return <Badge className="bg-blue-50 text-blue-700 border-blue-200">En cours</Badge>;
-      case 'en_attente':
-        return <Badge className="bg-orange-50 text-orange-700 border-orange-200">En attente</Badge>;
-      default:
-        return <Badge variant="secondary">Inconnu</Badge>;
+  const getStatusBadge = (dateIntervention: string) => {
+    const today = new Date();
+    const interventionDate = new Date(dateIntervention);
+    const diffDays = Math.ceil((today.getTime() - interventionDate.getTime()) / (1000 * 3600 * 24));
+    
+    if (diffDays === 0) {
+      return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Aujourd'hui</Badge>;
+    } else if (diffDays < 0) {
+      return <Badge className="bg-orange-50 text-orange-700 border-orange-200">Programmée</Badge>;
+    } else if (diffDays <= 7) {
+      return <Badge className="bg-green-50 text-green-700 border-green-200">Récente</Badge>;
+    } else {
+      return <Badge className="bg-gray-50 text-gray-700 border-gray-200">Ancienne</Badge>;
     }
   };
 
-  const getStatusIcon = (statut: string) => {
-    switch (statut) {
-      case 'terminee':
-        return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case 'en_cours':
-        return <Clock className="w-4 h-4 text-blue-600" />;
-      case 'en_attente':
-        return <AlertCircle className="w-4 h-4 text-orange-600" />;
-      default:
-        return <Clock className="w-4 h-4 text-gray-600" />;
+  const getStatusIcon = (dateIntervention: string) => {
+    const today = new Date();
+    const interventionDate = new Date(dateIntervention);
+    const diffDays = Math.ceil((today.getTime() - interventionDate.getTime()) / (1000 * 3600 * 24));
+    
+    if (diffDays === 0) {
+      return <Clock className="w-4 h-4 text-blue-600" />;
+    } else if (diffDays < 0) {
+      return <AlertCircle className="w-4 h-4 text-orange-600" />;
+    } else {
+      return <CheckCircle className="w-4 h-4 text-green-600" />;
     }
   };
 
-  const filteredReparations = reparations.filter(rep => {
-    const matchesSearch = rep.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         rep.client.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         rep.modele.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || rep.statut === statusFilter;
-    return matchesSearch && matchesStatus;
+  const filteredInterventions = interventions.filter(intervention => {
+    const matchesSearch = intervention.numero_chassis.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         intervention.nom_client.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         intervention.modele_moto.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
   });
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('fr-FR');
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+            <Wrench className="w-8 h-8 mr-3" />
+            Gestion des Réparations
+          </h1>
+          <p className="text-gray-600 mt-2">Chargement des interventions...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -109,45 +117,13 @@ const Reparations = () => {
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                 <Input
-                  placeholder="Rechercher par numéro, client, modèle..."
+                  placeholder="Rechercher par châssis, client, modèle..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Filtrer par statut" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les statuts</SelectItem>
-                  <SelectItem value="en_attente">En attente</SelectItem>
-                  <SelectItem value="en_cours">En cours</SelectItem>
-                  <SelectItem value="terminee">Terminée</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nouvelle Réparation
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-4xl">
-                <DialogHeader>
-                  <DialogTitle>Créer une nouvelle réparation</DialogTitle>
-                  <DialogDescription>
-                    Sélectionnez une checklist validée pour créer une réparation
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-600">
-                    Fonctionnalité en cours de développement...
-                  </p>
-                </div>
-              </DialogContent>
-            </Dialog>
           </div>
         </CardContent>
       </Card>
@@ -157,14 +133,18 @@ const Reparations = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center mr-3">
-                <AlertCircle className="w-5 h-5 text-orange-600" />
+              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center mr-3">
+                <Clock className="w-5 h-5 text-blue-600" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {reparations.filter(r => r.statut === 'en_attente').length}
+                  {interventions.filter(i => {
+                    const today = new Date();
+                    const interventionDate = new Date(i.date_intervention);
+                    return interventionDate.toDateString() === today.toDateString();
+                  }).length}
                 </p>
-                <p className="text-sm text-gray-600">En attente</p>
+                <p className="text-sm text-gray-600">Aujourd'hui</p>
               </div>
             </div>
           </CardContent>
@@ -172,14 +152,14 @@ const Reparations = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center mr-3">
-                <Clock className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center mr-3">
+                <AlertCircle className="w-5 h-5 text-orange-600" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {reparations.filter(r => r.statut === 'en_cours').length}
+                  {interventions.filter(i => new Date(i.date_intervention) > new Date()).length}
                 </p>
-                <p className="text-sm text-gray-600">En cours</p>
+                <p className="text-sm text-gray-600">Programmées</p>
               </div>
             </div>
           </CardContent>
@@ -192,9 +172,14 @@ const Reparations = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {reparations.filter(r => r.statut === 'terminee').length}
+                  {interventions.filter(i => {
+                    const today = new Date();
+                    const interventionDate = new Date(i.date_intervention);
+                    const diffDays = Math.ceil((today.getTime() - interventionDate.getTime()) / (1000 * 3600 * 24));
+                    return diffDays > 0 && diffDays <= 7;
+                  }).length}
                 </p>
-                <p className="text-sm text-gray-600">Terminées</p>
+                <p className="text-sm text-gray-600">Cette semaine</p>
               </div>
             </div>
           </CardContent>
@@ -206,7 +191,7 @@ const Reparations = () => {
                 <Wrench className="w-5 h-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{reparations.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{interventions.length}</p>
                 <p className="text-sm text-gray-600">Total</p>
               </div>
             </div>
@@ -214,12 +199,12 @@ const Reparations = () => {
         </Card>
       </div>
 
-      {/* Liste des réparations */}
+      {/* Liste des interventions */}
       <Card>
         <CardHeader>
-          <CardTitle>Liste des Réparations</CardTitle>
+          <CardTitle>Liste des Interventions</CardTitle>
           <CardDescription>
-            {filteredReparations.length} réparation(s) trouvée(s)
+            {filteredInterventions.length} intervention(s) trouvée(s)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -227,58 +212,53 @@ const Reparations = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Numéro</TableHead>
+                  <TableHead>Intervention</TableHead>
                   <TableHead>Véhicule</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Mécanicien</TableHead>
-                  <TableHead>Dates</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Statut</TableHead>
-                  <TableHead>Coût</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredReparations.map((reparation) => (
-                  <TableRow key={reparation.id}>
+                {filteredInterventions.map((intervention) => (
+                  <TableRow key={intervention.id}>
                     <TableCell className="font-medium">
                       <div className="flex items-center">
-                        {getStatusIcon(reparation.statut)}
-                        <span className="ml-2">{reparation.id}</span>
+                        {getStatusIcon(intervention.date_intervention)}
+                        <span className="ml-2">#{intervention.id}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{reparation.modele}</div>
-                        <div className="text-sm text-gray-500">{reparation.immatriculation}</div>
-                        <div className="text-xs text-gray-400">{reparation.kilometrage.toLocaleString()} km</div>
+                        <div className="font-medium">{intervention.modele_moto}</div>
+                        <div className="text-sm text-gray-500">{intervention.numero_chassis}</div>
+                        <div className="text-xs text-gray-400">{intervention.kilometrage?.toLocaleString()} km</div>
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="flex items-center">
+                          <User className="w-4 h-4 mr-2 text-gray-400" />
+                          {intervention.nom_client}
+                        </div>
+                        <div className="text-sm text-gray-500">{intervention.telephone_client}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{intervention.mecanicien_nom}</TableCell>
                     <TableCell>
                       <div className="flex items-center">
-                        <User className="w-4 h-4 mr-2 text-gray-400" />
-                        {reparation.client}
-                      </div>
-                    </TableCell>
-                    <TableCell>{reparation.mecanicien}</TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        <div className="flex items-center">
-                          <Calendar className="w-3 h-3 mr-1 text-gray-400" />
-                          {reparation.dateDebut}
-                        </div>
-                        {reparation.dateFin && (
-                          <div className="flex items-center text-gray-500">
-                            <Calendar className="w-3 h-3 mr-1 text-gray-400" />
-                            {reparation.dateFin}
-                          </div>
-                        )}
+                        <Calendar className="w-3 h-3 mr-1 text-gray-400" />
+                        {formatDate(intervention.date_intervention)}
                       </div>
                     </TableCell>
                     <TableCell>
-                      {getStatusBadge(reparation.statut)}
+                      <Badge variant="outline">{intervention.type_entretien}</Badge>
                     </TableCell>
-                    <TableCell className="font-medium">
-                      {reparation.cout.toFixed(2)}€
+                    <TableCell>
+                      {getStatusBadge(intervention.date_intervention)}
                     </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">

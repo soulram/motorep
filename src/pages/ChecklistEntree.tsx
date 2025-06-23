@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,7 +10,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { 
   ClipboardList, 
@@ -26,15 +25,14 @@ import {
 } from 'lucide-react';
 
 const checklistSchema = z.object({
-  modele: z.string().min(1, 'Le modèle est requis'),
-  numeroChassis: z.string().min(1, 'Le numéro de châssis est requis'),
-  immatriculation: z.string().min(1, 'L\'immatriculation est requise'),
-  telephoneClient: z.string().min(1, 'Le téléphone client est requis'),
-  nomClient: z.string().min(1, 'Le nom du client est requis'),
-  natureReparation: z.string().min(1, 'La nature de la réparation est requise'),
+  numero_chassis: z.string().min(1, 'Le numéro de châssis est requis'),
+  id_modele: z.number().min(1, 'Le modèle est requis'),
+  nom_client: z.string().min(1, 'Le nom du client est requis'),
+  telephone_client: z.string().min(1, 'Le téléphone client est requis'),
+  type_entretien: z.string().min(1, 'Le type d\'entretien est requis'),
   kilometrage: z.number().min(0, 'Le kilométrage doit être positif'),
-  mecanicien: z.string().min(1, 'Le mécanicien est requis'),
-  observations: z.string().optional()
+  id_mecanicien: z.number().min(1, 'Le mécanicien est requis'),
+  commentaire: z.string().optional()
 });
 
 type ChecklistFormData = z.infer<typeof checklistSchema>;
@@ -43,127 +41,149 @@ const ChecklistEntree = () => {
   const [contratInfo, setContratInfo] = useState<any>(null);
   const [servicesRecommandes, setServicesRecommandes] = useState<any[]>([]);
   const [isSearchingContrat, setIsSearchingContrat] = useState(false);
+  const [modeles, setModeles] = useState<any[]>([]);
+  const [mecaniciens, setMecaniciens] = useState<any[]>([]);
+  const [prestations, setPrestations] = useState<any[]>([]);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<ChecklistFormData>({
     resolver: zodResolver(checklistSchema)
   });
 
-  const numeroChassis = watch('numeroChassis');
+  const numeroChassis = watch('numero_chassis');
   const kilometrage = watch('kilometrage');
-  const modele = watch('modele');
+  const idModele = watch('id_modele');
 
-  const modelesMoto = [
-    'Yamaha MT-07',
-    'Yamaha MT-09',
-    'Honda CBR600RR',
-    'Honda CB650R',
-    'Kawasaki Z900',
-    'Suzuki GSX-R750',
-    'BMW S1000RR',
-    'Ducati Panigale V2'
-  ];
+  // Charger les données de référence
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [modelesRes, mecaniciensRes, prestationsRes] = await Promise.all([
+          fetch('http://localhost:5000/api/modeles'),
+          fetch('http://localhost:5000/api/mecaniciens'),
+          fetch('http://localhost:5000/api/prestations')
+        ]);
 
-  const mecaniciens = [
-    'Jean Dupont',
-    'Marie Martin',
-    'Pierre Durand',
-    'Sophie Leroy'
-  ];
+        if (modelesRes.ok) {
+          const modelesData = await modelesRes.json();
+          setModeles(modelesData);
+        }
 
-  const naturesReparation = [
-    'Révision périodique',
-    'Réparation panne',
-    'Changement pneus',
-    'Entretien chaîne',
-    'Réglage carburateur',
-    'Diagnostic électronique',
-    'Autre'
-  ];
+        if (mecaniciensRes.ok) {
+          const mecaniciensData = await mecaniciensRes.json();
+          setMecaniciens(mecaniciensData);
+        }
 
-  // Simulation de recherche de contrat
-  const rechercherContrat = async (chassis: string) => {
-    if (!chassis || chassis.length < 5) return;
-    
-    setIsSearchingContrat(true);
-    
-    // Simulation d'un appel API
-    setTimeout(() => {
-      if (chassis === 'VIN123456789') {
-        setContratInfo({
-          numeroContrat: 'CTR-2024-001',
-          client: 'Dupont Jean',
-          telephone: '0123456789',
-          dateExpiration: '2025-12-31',
-          kilometrageMax: 15000,
-          kilometrageUtilise: 8500,
-          valide: true
-        });
-        setValue('nomClient', 'Dupont Jean');
-        setValue('telephoneClient', '0123456789');
-      } else {
-        setContratInfo(null);
+        if (prestationsRes.ok) {
+          const prestationsData = await prestationsRes.json();
+          setPrestations(prestationsData);
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement des données:', error);
       }
-      setIsSearchingContrat(false);
-    }, 1000);
-  };
-
-  // Simulation de recommandations de services selon kilométrage
-  const obtenirServicesRecommandes = (km: number, modeleVehicule: string) => {
-    if (!km || !modeleVehicule) return;
-
-    const services = [];
-    
-    if (km >= 5000) {
-      services.push({ nom: 'Vidange moteur', prix: 45, obligatoire: true });
-      services.push({ nom: 'Changement filtre à huile', prix: 15, obligatoire: true });
-    }
-    
-    if (km >= 10000) {
-      services.push({ nom: 'Révision complète', prix: 120, obligatoire: true });
-      services.push({ nom: 'Contrôle freins', prix: 30, obligatoire: true });
-      services.push({ nom: 'Réglage chaîne', prix: 25, obligatoire: false });
-    }
-    
-    if (km >= 15000) {
-      services.push({ nom: 'Changement bougies', prix: 35, obligatoire: true });
-      services.push({ nom: 'Contrôle suspension', prix: 40, obligatoire: false });
-    }
-
-    setServicesRecommandes(services);
-  };
-
-  // Effet pour rechercher le contrat quand le châssis change
-  useState(() => {
-    if (numeroChassis) {
-      rechercherContrat(numeroChassis);
-    }
-  });
-
-  // Effet pour obtenir les services recommandés
-  useState(() => {
-    if (kilometrage && modele) {
-      obtenirServicesRecommandes(kilometrage, modele);
-    }
-  });
-
-  const onSubmit = (data: ChecklistFormData) => {
-    // Génération automatique du numéro de checklist
-    const numeroChecklist = `CL-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
-    
-    const checklistData = {
-      ...data,
-      numeroChecklist,
-      dateCreation: new Date().toISOString(),
-      statut: 'en_attente',
-      contrat: contratInfo,
-      servicesRecommandes
     };
 
-    console.log('Données checklist:', checklistData);
-    toast.success(`Checklist ${numeroChecklist} créée avec succès`);
-    
-    // Ici, vous feriez un appel API pour sauvegarder
-    // await api.post('/checklists', checklistData);
+    fetchData();
+  }, []);
+
+  // Recherche de contrat par numéro de châssis
+  useEffect(() => {
+    const rechercherContrat = async () => {
+      if (!numeroChassis || numeroChassis.length < 5) {
+        setContratInfo(null);
+        return;
+      }
+      
+      setIsSearchingContrat(true);
+      
+      try {
+        const response = await fetch(`http://localhost:5000/api/contrats/chassis/${numeroChassis}`);
+        if (response.ok) {
+          const contrat = await response.json();
+          setContratInfo(contrat);
+          setValue('nom_client', contrat.client_nom);
+          setValue('telephone_client', contrat.client_telephone);
+        } else {
+          setContratInfo(null);
+        }
+      } catch (error) {
+        console.error('Erreur lors de la recherche du contrat:', error);
+        setContratInfo(null);
+      } finally {
+        setIsSearchingContrat(false);
+      }
+    };
+
+    const timeoutId = setTimeout(rechercherContrat, 500);
+    return () => clearTimeout(timeoutId);
+  }, [numeroChassis, setValue]);
+
+  // Recommandations de services selon kilométrage
+  useEffect(() => {
+    const obtenirServicesRecommandes = () => {
+      if (!kilometrage || !idModele) return;
+
+      const services = [];
+      
+      if (kilometrage >= 5000) {
+        services.push({ nom: 'Vidange moteur', obligatoire: true });
+        services.push({ nom: 'Contrôle freins', obligatoire: true });
+      }
+      
+      if (kilometrage >= 10000) {
+        services.push({ nom: 'Révision complète', obligatoire: true });
+        services.push({ nom: 'Contrôle suspension', obligatoire: false });
+      }
+      
+      if (kilometrage >= 15000) {
+        services.push({ nom: 'Remplacement bougies', obligatoire: true });
+        services.push({ nom: 'Contrôle pneus', obligatoire: false });
+      }
+
+      setServicesRecommandes(services);
+    };
+
+    obtenirServicesRecommandes();
+  }, [kilometrage, idModele]);
+
+  const onSubmit = async (data: ChecklistFormData) => {
+    try {
+      // Créer l'intervention
+      const interventionData = {
+        numero_chassis: data.numero_chassis,
+        modele_moto: modeles.find(m => m.id === data.id_modele)?.nom || '',
+        nom_client: data.nom_client,
+        telephone_client: data.telephone_client,
+        type_entretien: data.type_entretien,
+        kilometrage: data.kilometrage,
+        id_mecanicien: data.id_mecanicien,
+        commentaire: data.commentaire,
+        prestations: servicesRecommandes.filter(s => s.obligatoire).map(s => ({
+          id_prestation: prestations.find(p => p.nom === s.nom)?.id || 1,
+          quantite: 1
+        }))
+      };
+
+      const response = await fetch('http://localhost:5000/api/interventions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(interventionData),
+      });
+
+      if (response.ok) {
+        const intervention = await response.json();
+        toast.success(`Intervention ${intervention.id} créée avec succès`);
+        
+        // Réinitialiser le formulaire
+        window.location.reload();
+      } else {
+        throw new Error('Erreur lors de la création de l\'intervention');
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      toast.error('Erreur lors de la création de l\'intervention');
+    }
   };
 
   return (
@@ -192,31 +212,31 @@ const ChecklistEntree = () => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="modele">Modèle de la moto *</Label>
-                  <Select onValueChange={(value) => setValue('modele', value)}>
+                  <Label htmlFor="id_modele">Modèle de la moto *</Label>
+                  <Select onValueChange={(value) => setValue('id_modele', parseInt(value))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner un modèle" />
                     </SelectTrigger>
                     <SelectContent>
-                      {modelesMoto.map((modele) => (
-                        <SelectItem key={modele} value={modele}>
-                          {modele}
+                      {modeles.map((modele) => (
+                        <SelectItem key={modele.id} value={modele.id.toString()}>
+                          {modele.marque_nom} {modele.nom}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {errors.modele && (
-                    <p className="text-sm text-red-600 mt-1">{errors.modele.message}</p>
+                  {errors.id_modele && (
+                    <p className="text-sm text-red-600 mt-1">{errors.id_modele.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <Label htmlFor="numeroChassis">Numéro de châssis *</Label>
+                  <Label htmlFor="numero_chassis">Numéro de châssis *</Label>
                   <div className="relative">
                     <Hash className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                     <Input
-                      id="numeroChassis"
-                      {...register('numeroChassis')}
+                      id="numero_chassis"
+                      {...register('numero_chassis')}
                       placeholder="VIN123456789"
                       className="pl-10"
                     />
@@ -226,20 +246,8 @@ const ChecklistEntree = () => {
                       </div>
                     )}
                   </div>
-                  {errors.numeroChassis && (
-                    <p className="text-sm text-red-600 mt-1">{errors.numeroChassis.message}</p>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="immatriculation">Immatriculation *</Label>
-                  <Input
-                    id="immatriculation"
-                    {...register('immatriculation')}
-                    placeholder="AB-123-CD"
-                  />
-                  {errors.immatriculation && (
-                    <p className="text-sm text-red-600 mt-1">{errors.immatriculation.message}</p>
+                  {errors.numero_chassis && (
+                    <p className="text-sm text-red-600 mt-1">{errors.numero_chassis.message}</p>
                   )}
                 </div>
 
@@ -259,51 +267,52 @@ const ChecklistEntree = () => {
                     <p className="text-sm text-red-600 mt-1">{errors.kilometrage.message}</p>
                   )}
                 </div>
+
+                <div>
+                  <Label htmlFor="type_entretien">Type d'entretien *</Label>
+                  <Select onValueChange={(value) => setValue('type_entretien', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner le type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Révision périodique">Révision périodique</SelectItem>
+                      <SelectItem value="Réparation panne">Réparation panne</SelectItem>
+                      <SelectItem value="Changement pneus">Changement pneus</SelectItem>
+                      <SelectItem value="Entretien chaîne">Entretien chaîne</SelectItem>
+                      <SelectItem value="Diagnostic électronique">Diagnostic électronique</SelectItem>
+                      <SelectItem value="Autre">Autre</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.type_entretien && (
+                    <p className="text-sm text-red-600 mt-1">{errors.type_entretien.message}</p>
+                  )}
+                </div>
               </div>
 
               <div>
-                <Label htmlFor="natureReparation">Nature de la réparation *</Label>
-                <Select onValueChange={(value) => setValue('natureReparation', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner le type de réparation" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {naturesReparation.map((nature) => (
-                      <SelectItem key={nature} value={nature}>
-                        {nature}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.natureReparation && (
-                  <p className="text-sm text-red-600 mt-1">{errors.natureReparation.message}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="mecanicien">Mécanicien assigné *</Label>
-                <Select onValueChange={(value) => setValue('mecanicien', value)}>
+                <Label htmlFor="id_mecanicien">Mécanicien assigné *</Label>
+                <Select onValueChange={(value) => setValue('id_mecanicien', parseInt(value))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Sélectionner un mécanicien" />
                   </SelectTrigger>
                   <SelectContent>
                     {mecaniciens.map((mecanicien) => (
-                      <SelectItem key={mecanicien} value={mecanicien}>
-                        {mecanicien}
+                      <SelectItem key={mecanicien.id} value={mecanicien.id.toString()}>
+                        {mecanicien.nom}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.mecanicien && (
-                  <p className="text-sm text-red-600 mt-1">{errors.mecanicien.message}</p>
+                {errors.id_mecanicien && (
+                  <p className="text-sm text-red-600 mt-1">{errors.id_mecanicien.message}</p>
                 )}
               </div>
 
               <div>
-                <Label htmlFor="observations">Observations</Label>
+                <Label htmlFor="commentaire">Observations</Label>
                 <Textarea
-                  id="observations"
-                  {...register('observations')}
+                  id="commentaire"
+                  {...register('commentaire')}
                   placeholder="Remarques particulières, défauts constatés..."
                   rows={3}
                 />
@@ -322,30 +331,30 @@ const ChecklistEntree = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="nomClient">Nom du client *</Label>
+                  <Label htmlFor="nom_client">Nom du client *</Label>
                   <Input
-                    id="nomClient"
-                    {...register('nomClient')}
+                    id="nom_client"
+                    {...register('nom_client')}
                     placeholder="Nom Prénom"
                   />
-                  {errors.nomClient && (
-                    <p className="text-sm text-red-600 mt-1">{errors.nomClient.message}</p>
+                  {errors.nom_client && (
+                    <p className="text-sm text-red-600 mt-1">{errors.nom_client.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <Label htmlFor="telephoneClient">Téléphone *</Label>
+                  <Label htmlFor="telephone_client">Téléphone *</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                     <Input
-                      id="telephoneClient"
-                      {...register('telephoneClient')}
+                      id="telephone_client"
+                      {...register('telephone_client')}
                       placeholder="0123456789"
                       className="pl-10"
                     />
                   </div>
-                  {errors.telephoneClient && (
-                    <p className="text-sm text-red-600 mt-1">{errors.telephoneClient.message}</p>
+                  {errors.telephone_client && (
+                    <p className="text-sm text-red-600 mt-1">{errors.telephone_client.message}</p>
                   )}
                 </div>
               </CardContent>
@@ -362,24 +371,18 @@ const ChecklistEntree = () => {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Numéro:</span>
-                    <Badge variant="outline">{contratInfo.numeroContrat}</Badge>
+                    <span className="text-sm text-gray-600">Type:</span>
+                    <Badge variant="outline">{contratInfo.type_contrat}</Badge>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Expiration:</span>
-                    <span className="text-sm font-medium">{contratInfo.dateExpiration}</span>
+                    <span className="text-sm font-medium">{contratInfo.date_fin}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Kilométrage:</span>
                     <span className="text-sm font-medium">
-                      {contratInfo.kilometrageUtilise} / {contratInfo.kilometrageMax} km
+                      {contratInfo.kilometrage_actuel?.toLocaleString()} km
                     </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full" 
-                      style={{ width: `${(contratInfo.kilometrageUtilise / contratInfo.kilometrageMax) * 100}%` }}
-                    ></div>
                   </div>
                 </CardContent>
               </Card>
@@ -407,7 +410,6 @@ const ChecklistEntree = () => {
                           <Badge variant="destructive" className="text-xs">Obligatoire</Badge>
                         )}
                       </div>
-                      <span className="text-sm text-gray-600">{service.prix}€</span>
                     </div>
                   </div>
                 ))}
@@ -423,7 +425,7 @@ const ChecklistEntree = () => {
           </Button>
           <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
             <Plus className="w-4 h-4 mr-2" />
-            Créer la Checklist
+            Créer l'Intervention
           </Button>
         </div>
       </form>

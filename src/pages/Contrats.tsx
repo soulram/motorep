@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,69 +23,41 @@ import {
 const Contrats = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [contrats, setContrats] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Données simulées des contrats
-  const contrats = [
-    {
-      id: 'CTR-2024-001',
-      client: 'Dupont Jean',
-      telephone: '0123456789',
-      email: 'jean.dupont@email.com',
-      dateDebut: '2024-01-15',
-      dateFin: '2025-01-15',
-      kilometrageMax: 15000,
-      kilometrageUtilise: 8500,
-      statut: 'actif',
-      servicesInclus: ['Vidange', 'Révision', 'Contrôle technique'],
-      piecesAllouees: {
-        'Filtre à huile': { alloue: 4, utilise: 2, restant: 2 },
-        'Huile moteur': { alloue: 20, utilise: 8, restant: 12 },
-        'Plaquettes frein': { alloue: 2, utilise: 0, restant: 2 }
-      },
-      coutTotal: 450.00,
-      coutUtilise: 185.50
-    },
-    {
-      id: 'CTR-2024-002',
-      client: 'Martin Sophie',
-      telephone: '0987654321',
-      email: 'sophie.martin@email.com',
-      dateDebut: '2024-03-10',
-      dateFin: '2025-03-10',
-      kilometrageMax: 12000,
-      kilometrageUtilise: 11800,
-      statut: 'expire_bientot',
-      servicesInclus: ['Vidange', 'Révision'],
-      piecesAllouees: {
-        'Filtre à huile': { alloue: 3, utilise: 3, restant: 0 },
-        'Huile moteur': { alloue: 15, utilise: 14, restant: 1 }
-      },
-      coutTotal: 320.00,
-      coutUtilise: 298.00
-    },
-    {
-      id: 'CTR-2023-045',
-      client: 'Leroy Pierre',
-      telephone: '0147258369',
-      email: 'pierre.leroy@email.com',
-      dateDebut: '2023-06-01',
-      dateFin: '2024-06-01',
-      kilometrageMax: 18000,
-      kilometrageUtilise: 18000,
-      statut: 'expire',
-      servicesInclus: ['Vidange', 'Révision', 'Contrôle technique', 'Pneus'],
-      piecesAllouees: {
-        'Filtre à huile': { alloue: 5, utilise: 5, restant: 0 },
-        'Huile moteur': { alloue: 25, utilise: 25, restant: 0 },
-        'Pneus': { alloue: 2, utilise: 2, restant: 0 }
-      },
-      coutTotal: 680.00,
-      coutUtilise: 680.00
-    }
-  ];
+  useEffect(() => {
+    const fetchContrats = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/contrats');
+        if (response.ok) {
+          const data = await response.json();
+          setContrats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching contrats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const getStatusBadge = (statut: string) => {
-    switch (statut) {
+    fetchContrats();
+  }, []);
+
+  const getContractStatus = (contrat) => {
+    const today = new Date();
+    const dateFin = new Date(contrat.date_fin);
+    const diffDays = Math.ceil((dateFin.getTime() - today.getTime()) / (1000 * 3600 * 24));
+    
+    if (!contrat.actif) return 'expire';
+    if (diffDays < 0) return 'expire';
+    if (diffDays <= 30) return 'expire_bientot';
+    return 'actif';
+  };
+
+  const getStatusBadge = (contrat) => {
+    const status = getContractStatus(contrat);
+    switch (status) {
       case 'actif':
         return <Badge className="bg-green-50 text-green-700 border-green-200">Actif</Badge>;
       case 'expire_bientot':
@@ -97,8 +69,9 @@ const Contrats = () => {
     }
   };
 
-  const getStatusIcon = (statut: string) => {
-    switch (statut) {
+  const getStatusIcon = (contrat) => {
+    const status = getContractStatus(contrat);
+    switch (status) {
       case 'actif':
         return <CheckCircle className="w-4 h-4 text-green-600" />;
       case 'expire_bientot':
@@ -111,19 +84,36 @@ const Contrats = () => {
   };
 
   const filteredContrats = contrats.filter(contrat => {
-    const matchesSearch = contrat.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         contrat.client.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || contrat.statut === statusFilter;
+    const matchesSearch = contrat.id.toString().includes(searchTerm.toLowerCase()) ||
+                         contrat.client_nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         contrat.numero_chassis.toLowerCase().includes(searchTerm.toLowerCase());
+    const status = getContractStatus(contrat);
+    const matchesStatus = statusFilter === 'all' || status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const calculateKilometrageProgress = (utilise: number, max: number) => {
-    return Math.min((utilise / max) * 100, 100);
+  const calculateProgress = (current, max) => {
+    if (!max) return 0;
+    return Math.min((current / max) * 100, 100);
   };
 
-  const calculateCostProgress = (utilise: number, total: number) => {
-    return Math.min((utilise / total) * 100, 100);
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('fr-FR');
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+            <FileText className="w-8 h-8 mr-3" />
+            Gestion des Contrats
+          </h1>
+          <p className="text-gray-600 mt-2">Chargement des contrats...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -143,7 +133,7 @@ const Contrats = () => {
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                 <Input
-                  placeholder="Rechercher par numéro ou client..."
+                  placeholder="Rechercher par numéro, client, châssis..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -179,7 +169,7 @@ const Contrats = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {contrats.filter(c => c.statut === 'actif').length}
+                  {contrats.filter(c => getContractStatus(c) === 'actif').length}
                 </p>
                 <p className="text-sm text-gray-600">Actifs</p>
               </div>
@@ -194,7 +184,7 @@ const Contrats = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {contrats.filter(c => c.statut === 'expire_bientot').length}
+                  {contrats.filter(c => getContractStatus(c) === 'expire_bientot').length}
                 </p>
                 <p className="text-sm text-gray-600">Expirent bientôt</p>
               </div>
@@ -209,7 +199,7 @@ const Contrats = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {contrats.filter(c => c.statut === 'expire').length}
+                  {contrats.filter(c => getContractStatus(c) === 'expire').length}
                 </p>
                 <p className="text-sm text-gray-600">Expirés</p>
               </div>
@@ -223,10 +213,8 @@ const Contrats = () => {
                 <TrendingUp className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {contrats.reduce((sum, c) => sum + c.coutUtilise, 0).toFixed(0)}€
-                </p>
-                <p className="text-sm text-gray-600">CA généré</p>
+                <p className="text-2xl font-bold text-gray-900">{contrats.length}</p>
+                <p className="text-sm text-gray-600">Total</p>
               </div>
             </div>
           </CardContent>
@@ -251,22 +239,28 @@ const Contrats = () => {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
-                          {getStatusIcon(contrat.statut)}
-                          <span className="ml-2 font-semibold text-lg">{contrat.id}</span>
+                          {getStatusIcon(contrat)}
+                          <span className="ml-2 font-semibold text-lg">Contrat #{contrat.id}</span>
                         </div>
-                        {getStatusBadge(contrat.statut)}
+                        {getStatusBadge(contrat)}
                       </div>
                       
                       <div className="space-y-2">
                         <div className="flex items-center">
                           <User className="w-4 h-4 mr-2 text-gray-400" />
-                          <span className="font-medium">{contrat.client}</span>
+                          <span className="font-medium">{contrat.client_nom}</span>
                         </div>
                         <div className="flex items-center">
                           <Calendar className="w-4 h-4 mr-2 text-gray-400" />
                           <span className="text-sm text-gray-600">
-                            {contrat.dateDebut} → {contrat.dateFin}
+                            {formatDate(contrat.date_debut)} → {formatDate(contrat.date_fin)}
                           </span>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          <strong>Véhicule:</strong> {contrat.marque_nom} {contrat.modele_nom}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          <strong>Châssis:</strong> {contrat.numero_chassis}
                         </div>
                       </div>
 
@@ -287,57 +281,46 @@ const Contrats = () => {
                       <h4 className="font-medium text-gray-900">Utilisation Kilométrage</h4>
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
-                          <span>Utilisé: {contrat.kilometrageUtilise.toLocaleString()} km</span>
-                          <span>Max: {contrat.kilometrageMax.toLocaleString()} km</span>
+                          <span>Départ: {contrat.kilometrage_depart?.toLocaleString()} km</span>
+                          <span>Actuel: {contrat.kilometrage_actuel?.toLocaleString()} km</span>
                         </div>
                         <Progress 
-                          value={calculateKilometrageProgress(contrat.kilometrageUtilise, contrat.kilometrageMax)} 
+                          value={calculateProgress(
+                            contrat.kilometrage_actuel - contrat.kilometrage_depart,
+                            20000 // Limite fictive pour la démo
+                          )} 
                           className="h-2"
                         />
                         <div className="text-xs text-gray-500">
-                          {(100 - calculateKilometrageProgress(contrat.kilometrageUtilise, contrat.kilometrageMax)).toFixed(1)}% restant
+                          {(contrat.kilometrage_actuel - contrat.kilometrage_depart).toLocaleString()} km parcourus
                         </div>
                       </div>
 
-                      <h4 className="font-medium text-gray-900 mt-4">Utilisation Budget</h4>
                       <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>Utilisé: {contrat.coutUtilise.toFixed(2)}€</span>
-                          <span>Total: {contrat.coutTotal.toFixed(2)}€</span>
-                        </div>
-                        <Progress 
-                          value={calculateCostProgress(contrat.coutUtilise, contrat.coutTotal)} 
-                          className="h-2"
-                        />
-                        <div className="text-xs text-gray-500">
-                          {(contrat.coutTotal - contrat.coutUtilise).toFixed(2)}€ restant
-                        </div>
+                        <h5 className="font-medium text-gray-900">Type de contrat</h5>
+                        <Badge variant="outline">{contrat.type_contrat}</Badge>
+                        {contrat.type_description && (
+                          <p className="text-xs text-gray-500">{contrat.type_description}</p>
+                        )}
                       </div>
                     </div>
 
-                    {/* Pièces allouées */}
+                    {/* Informations complémentaires */}
                     <div className="space-y-3">
-                      <h4 className="font-medium text-gray-900">Pièces Allouées</h4>
+                      <h4 className="font-medium text-gray-900">Contact</h4>
+                      <div className="space-y-1">
+                        <div className="text-sm">{contrat.client_telephone}</div>
+                      </div>
+                      
                       <div className="space-y-2">
-                        {Object.entries(contrat.piecesAllouees).map(([piece, data]) => (
-                          <div key={piece} className="bg-gray-50 p-2 rounded">
-                            <div className="flex justify-between text-sm">
-                              <span className="font-medium">{piece}</span>
-                              <span className="text-gray-600">
-                                {data.utilise}/{data.alloue}
-                              </span>
-                            </div>
-                            <Progress 
-                              value={(data.utilise / data.alloue) * 100} 
-                              className="h-1 mt-1"
-                            />
-                            {data.restant === 0 && (
-                              <div className="text-xs text-red-600 mt-1">
-                                Stock épuisé
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                        <h5 className="font-medium text-gray-900">Statut</h5>
+                        <div className="text-sm">
+                          {contrat.actif ? (
+                            <span className="text-green-600">Contrat actif</span>
+                          ) : (
+                            <span className="text-red-600">Contrat inactif</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
